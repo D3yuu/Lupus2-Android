@@ -1,0 +1,126 @@
+apply plugin: 'com.android.application'
+
+def lupus2Bootstrap = (project.findProperty('lupus2Bootstrap') ?: 'false')
+def lupus2Lite = (project.findProperty('lupus2Lite') ?: 'false').toBoolean()
+def localConfig = new Properties()
+def localProperties = rootProject.file('local.properties')
+if (localProperties.isFile()) {
+    localProperties.withInputStream { localConfig.load(it) }
+}
+
+def contentRoot = { Object setting, boolean allowHttp ->
+    if (!setting) {
+        return '""'
+    }
+
+    def uri = new URI(setting.toString().trim())
+    def schemes = allowHttp ? ['https', 'http'] : ['https']
+    if (!(uri.scheme in schemes) || !uri.host || !uri.path?.endsWith('/') ||
+            uri.userInfo != null || uri.query != null || uri.fragment != null) {
+        throw new GradleException("lupus2ContentRoot must be a ${schemes.join(' or ')} URL ending in /, without credentials, query or fragment.")
+    }
+    return "\"${uri.toASCIIString()}\""
+}
+
+def lupus2ContentRoot = project.findProperty('lupus2ContentRoot')
+def lupus2VersionCode = (project.findProperty('lupus2VersionCode') ?: '1').toInteger()
+def lupus2VersionName = (project.findProperty('lupus2VersionName') ?: '1.0').toString()
+def nativeBuildDirectory = project.findProperty('lupus2NativeBuildDirectory')
+
+def releaseStoreFile = System.getenv('LUPUS2_KEYSTORE')
+def releaseStorePassword = System.getenv('LUPUS2_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('LUPUS2_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('LUPUS2_KEY_PASSWORD')
+
+android {
+    namespace "com.metin2.client"
+    compileSdkVersion 33
+    ndkVersion "28.0.13004108"
+
+    defaultConfig {
+        applicationId "com.metin2.client"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode lupus2VersionCode
+        versionName lupus2VersionName
+        buildConfigField "String", "CONTENT_ROOT", '""'
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++11 -frtti -fexceptions -Wno-invalid-source-encoding"
+                arguments "-DANDROID_STL=c++_shared", "-DANDROID_TOOLCHAIN=clang", "-DLUPUS2_BOOTSTRAP=${lupus2Bootstrap}"
+                // The shipping Android target is 64-bit ARM.  Keeping the
+                // bootstrap build to one ABI avoids the broken legacy x86
+                // linker cache and makes dependency work deterministic.
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            buildConfigField "String", "CONTENT_ROOT", contentRoot(lupus2ContentRoot, false)
+            manifestPlaceholders = [contentCleartext: "false"]
+            if (releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            debuggable true
+            jniDebuggable true
+            def developmentRoot = project.findProperty('lupus2DebugContentRoot') ?:
+                    lupus2ContentRoot ?: localConfig.getProperty('lupus2.debugContentRoot')
+            def debugContentRoot = contentRoot(developmentRoot, true)
+            buildConfigField "String", "CONTENT_ROOT", debugContentRoot
+            manifestPlaceholders = [contentCleartext: debugContentRoot.startsWith('"http:').toString()]
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+            assets.srcDirs = lupus2Lite ? ['src/lite/assets'] : ['src/main/assets']
+        }
+    }
+
+    androidResources {
+        noCompress += ['data', 'index']
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("../../clientsource/CMakeLists.txt")
+            if (nativeBuildDirectory) {
+                buildStagingDirectory file(nativeBuildDirectory)
+            }
+        }
+    }
+
+    packagingOptions {
+        pickFirst 'lib/arm64-v8a/libmetin2_mobile.so'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+}

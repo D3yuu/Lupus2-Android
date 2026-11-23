@@ -1,0 +1,53 @@
+# Local IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.iml
+
+# Android/Gradle generated output
+.gradle/
+**/.cxx/
+**/build/
+**/.externalNativeBuild/
+android/local.properties
+*.log
+*.pid
+*.log.err
+*.err.log
+
+# Signing material must never be committed
+*.jks
+*.keystore
+*.p12
+*.pem
+*.mobileprovision
+keystore.properties
+
+# Generated packages and local diagnostics
+*.apk
+*.aab
+*.zip
+*.7z
+/*.png
+outputs/
+.diagnostics/
+*.vcxproj*
+*.sln
+*.exe
+*.dll
+*.lib
+*.pdb
+*.sql
+*.bak
+/Extern/lib/
+/clientsource/bin/
+/android/app/src/main/assets/
+
+# The public Android release does not contain the unfinished iOS host.
+ios/
+
+# Local toolchains are installed separately, not committed.
+third_party/jdk17/
+third_party/gradle-8.13/
+
